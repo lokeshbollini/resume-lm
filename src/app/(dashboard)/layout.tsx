@@ -13,6 +13,7 @@ import {
   parseImpersonationStateCookieValue,
 } from "@/lib/impersonation";
 import { getSubscriptionAccessState } from "@/lib/subscription-access";
+import { SELF_HOST_UNLIMITED } from "@/lib/self-host";
 import {
   getAuthenticatedUser,
   getDashboardSubscription,
@@ -36,9 +37,12 @@ export default async function DashboardLayout({
     cookieStore.get(IMPERSONATION_STATE_COOKIE_NAME)?.value,
   );
 
-  let showUpgradeButton = true;
-  let isProPlan = false;
-  let subscriptionPlan = "free";
+  // Nothing to upgrade to on a self-hosted instance, so the CTA never shows —
+  // including in the fallback path below, where a failed subscription read
+  // would otherwise leave the button on.
+  let showUpgradeButton = !SELF_HOST_UNLIMITED;
+  let isProPlan = SELF_HOST_UNLIMITED;
+  let subscriptionPlan = SELF_HOST_UNLIMITED ? "pro" : "free";
   let subscriptionStatus: string | null = null;
   let upgradeButtonVariant: "trial" | "upgrade" = "upgrade";
 

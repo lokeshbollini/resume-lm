@@ -1,6 +1,18 @@
 import { PLAN_CONFIG } from "@/lib/plans";
+import { SELF_HOST_UNLIMITED } from "@/lib/self-host";
 
-export const FREE_PLAN_RESUME_LIMITS = PLAN_CONFIG.free.limits;
+const UNLIMITED_RESUME_LIMITS = {
+  base: Number.POSITIVE_INFINITY,
+  tailored: Number.POSITIVE_INFINITY,
+} as const;
+
+/**
+ * Resume caps applied to users without Pro access. On a self-hosted instance
+ * every user has Pro access, so these are never reached — they are lifted here
+ * as well so that any code path reading the numbers directly stays consistent.
+ */
+export const FREE_PLAN_RESUME_LIMITS: Record<'base' | 'tailored', number> =
+  SELF_HOST_UNLIMITED ? UNLIMITED_RESUME_LIMITS : PLAN_CONFIG.free.limits;
 
 export type ResumeLimitType = keyof typeof FREE_PLAN_RESUME_LIMITS;
 

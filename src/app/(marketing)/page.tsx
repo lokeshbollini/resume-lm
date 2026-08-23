@@ -11,6 +11,7 @@ import { Logo } from "@/components/ui/logo";
 import { Metadata } from "next";
 import Script from "next/script";
 import { toSafeJsonScript } from "@/lib/html-safety";
+import { SELF_HOST_UNLIMITED } from "@/lib/self-host";
 import { AuthDialogProvider } from "@/components/auth/auth-dialog-provider";
 import { siteUrl } from "@/lib/site-config";
 
@@ -106,10 +107,13 @@ export default function Page() {
             <CreatorStory />
           </section>
 
-          {/* Pricing Plans Section */}
-          <section id="pricing" aria-labelledby="pricing-heading">
-            <PricingPlans />
-          </section>
+          {/* Pricing Plans Section — omitted entirely on a self-hosted
+              instance, which has a single tier and nothing to sell. */}
+          {!SELF_HOST_UNLIMITED && (
+            <section id="pricing" aria-labelledby="pricing-heading">
+              <PricingPlans />
+            </section>
+          )}
 
           {/* FAQ Section */}
           <FAQ />

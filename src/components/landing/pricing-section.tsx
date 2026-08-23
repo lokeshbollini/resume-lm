@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { AuthDialog } from "@/components/auth/auth-dialog";
 import { PLAN_CONFIG } from "@/lib/plans";
+import { SELF_HOST_UNLIMITED } from "@/lib/self-host";
 
 interface PricingFeature {
   text: string;
@@ -47,6 +48,10 @@ const tiers: PricingTier[] = [
 ];
 
 export function PricingSection() {
+  // A self-hosted instance has one tier. Showing a price comparison would
+  // advertise a plan nobody can buy here.
+  if (SELF_HOST_UNLIMITED) return null;
+
   return (
     <section className="pb-16 px-4 sm:px-6 lg:px-8 relative ">
       {/* Background gradient orbs */}

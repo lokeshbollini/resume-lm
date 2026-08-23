@@ -4,6 +4,7 @@ import { Stripe } from "stripe";
 import { createServiceClient } from '@/utils/supabase/server';
 import { Subscription } from '@/lib/types';
 import { getSubscriptionAccessState } from '@/lib/subscription-access';
+import { SELF_HOST_UNLIMITED } from '@/lib/self-host';
 import { getAuthenticatedUser, getDashboardSubscription } from '@/utils/actions';
 import {
   mapStripeSubscriptionToAppSubscription,
@@ -352,7 +353,10 @@ export async function checkSubscriptionPlan() {
   const { data } = await getDashboardSubscription(user.id);
 
   const subscriptionState = getSubscriptionAccessState(data);
-  const effectivePlan = data ? subscriptionState.effectivePlan : '';
+  // On a self-hosted instance the `subscriptions` row is bookkeeping we do not
+  // need: a user with no row is still a Pro user, not an empty plan.
+  const effectivePlan =
+    data || SELF_HOST_UNLIMITED ? subscriptionState.effectivePlan : '';
 
   return {
     plan: effectivePlan,
@@ -366,6 +370,9 @@ export async function checkSubscriptionPlan() {
 
 // Check if user has ever started a subscription/trial (used for gating)
 export async function hasActiveSubscriptionOrTrial(userId: string): Promise<boolean> {
+  // No checkout exists to have gone through on a self-hosted instance.
+  if (SELF_HOST_UNLIMITED) return true;
+
   const supabase = await createServiceClient();
 
   const { data, error } = await supabase
@@ -395,7 +402,10 @@ export async function getSubscriptionPlan(returnId?: boolean) {
   const { data } = await getDashboardSubscription(user.id);
 
   const subscriptionState = getSubscriptionAccessState(data);
-  const effectivePlan = data ? subscriptionState.effectivePlan : '';
+  // On a self-hosted instance the `subscriptions` row is bookkeeping we do not
+  // need: a user with no row is still a Pro user, not an empty plan.
+  const effectivePlan =
+    data || SELF_HOST_UNLIMITED ? subscriptionState.effectivePlan : '';
 
   if (returnId) {
     return {

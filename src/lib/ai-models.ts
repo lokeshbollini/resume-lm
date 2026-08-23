@@ -4,6 +4,7 @@
  */
 
 import { ServiceName } from './types'
+import { SELF_HOST_UNLIMITED } from './self-host'
 
 // ========================
 // Type Definitions
@@ -89,8 +90,58 @@ export const PROVIDERS: Partial<Record<ServiceName, AIProvider>> = {
     envKey: 'OPENROUTER_API_KEY',
     sdkInitializer: 'openrouter',
     unstable: false
-    
+
   },
+  ollama: {
+    id: 'ollama',
+    name: 'Ollama (local)',
+    apiLink: 'https://ollama.com/download',
+    envKey: 'OLLAMA_API_KEY',
+    sdkInitializer: 'ollama',
+    unstable: false
+  },
+}
+
+// ========================
+// Ollama (local, zero-cost) Models
+// ========================
+
+/**
+ * Ollama exposes an OpenAI-compatible endpoint, so any locally pulled model can
+ * be driven through the existing OpenAI provider with a different base URL.
+ *
+ * Which models exist is a property of the machine running Ollama, not of this
+ * codebase, so the catalog is built from an env variable instead of hardcoded.
+ * Set NEXT_PUBLIC_OLLAMA_MODELS to a comma-separated list of tags you have
+ * pulled, e.g. "llama3.1:8b,qwen2.5:14b,mistral:7b". Leave it unset to hide
+ * Ollama from the model picker entirely.
+ */
+function buildOllamaModels(): AIModel[] {
+  const raw = process.env.NEXT_PUBLIC_OLLAMA_MODELS?.trim()
+  if (!raw) return []
+
+  return raw
+    .split(',')
+    .map(tag => tag.trim())
+    .filter(tag => tag.length > 0)
+    .map(tag => ({
+      id: `ollama/${tag}`,
+      name: `${tag} (local)`,
+      provider: 'ollama' as ServiceName,
+      features: {
+        // Free in the literal sense: the request never leaves your machine.
+        isFree: true,
+        isRecommended: false,
+        isUnstable: false,
+        maxTokens: 128000,
+        supportsVision: false,
+        supportsTools: true,
+      },
+      availability: {
+        requiresApiKey: false,
+        requiresPro: false,
+      },
+    }))
 }
 
 // ========================
@@ -273,7 +324,27 @@ export const AI_MODELS: AIModel[] = [
       requiresPro: true
     }
   },
-]
+  ...buildOllamaModels(),
+].map(applySelfHostOverrides)
+
+/**
+ * On a self-hosted instance there is no paid tier and no app-funded key to
+ * protect, so nothing needs to stay Pro-only or hidden. The direct-Anthropic
+ * entries in particular stop being BYOK-only compatibility targets and become
+ * first-class options backed by this deployment's own ANTHROPIC_API_KEY.
+ */
+function applySelfHostOverrides(model: AIModel): AIModel {
+  if (!SELF_HOST_UNLIMITED) return model
+
+  return {
+    ...model,
+    isVisible: true,
+    availability: {
+      ...model.availability,
+      requiresPro: false,
+    },
+  }
+}
 
 // ========================
 // Legacy ID Aliases
@@ -454,6 +525,12 @@ export function isModelAvailable(
   const model = getModelById(modelId)
   if (!model) return false
 
+  // A self-hosted instance funds every model with its own keys, so the picker
+  // offers all of them. If the matching key is missing the server returns a
+  // "no API key configured" error naming the provider, which is a clearer
+  // signal than silently hiding the model.
+  if (SELF_HOST_UNLIMITED) return true
+
   if (model.availability.requiresPro && !isPro) return false
 
   // Models marked requiresApiKey cannot use ResumeLM's app-funded key, even
@@ -492,7 +569,7 @@ export function getModelProvider(modelId: string): AIProvider | undefined {
  * Group models by provider for display
  */
 export function groupModelsByProvider(): GroupedModels[] {
-  const providerOrder: ServiceName[] = ['anthropic', 'openai', 'openrouter']
+  const providerOrder: ServiceName[] = ['anthropic', 'openai', 'openrouter', 'ollama']
   const grouped = new Map<ServiceName, AIModel[]>()
 
   // Group models by provider

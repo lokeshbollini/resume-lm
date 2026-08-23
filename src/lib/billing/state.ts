@@ -1,3 +1,5 @@
+import { SELF_HOST_UNLIMITED } from "@/lib/self-host";
+
 export type BillingState =
   | "trial"
   | "active"
@@ -29,6 +31,11 @@ export function getBillingState(
   input: BillingStateInput,
   now: Date = new Date(),
 ): BillingState {
+  // A self-hosted instance has no paid tier: there is no Stripe subscription to
+  // read, no period to expire, and nothing to downgrade to. Report every user
+  // as an active subscriber so the rest of the app stops asking.
+  if (SELF_HOST_UNLIMITED) return "active";
+
   const plan = input.plan?.toLowerCase() ?? "";
   const status = input.status?.toLowerCase() ?? "";
   const stripeStatus = input.stripeStatus?.toLowerCase() ?? "";

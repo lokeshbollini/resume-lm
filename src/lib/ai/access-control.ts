@@ -4,6 +4,13 @@ import {
   type AIModel,
 } from "@/lib/ai-models";
 import type { ServiceName } from "@/lib/types";
+import { SELF_HOST_UNLIMITED } from "@/lib/self-host";
+
+/**
+ * Ollama serves models locally over an OpenAI-compatible API and ignores the
+ * Authorization header, but the OpenAI SDK still insists on a non-empty key.
+ */
+const OLLAMA_PLACEHOLDER_KEY = "ollama";
 
 interface APIKeyInput {
   service: string;
@@ -65,6 +72,13 @@ function getServerKey(providerId: ServiceName) {
     );
   }
 
+  if (providerId === "ollama") {
+    return {
+      provider,
+      apiKey: process.env[provider.envKey]?.trim() || OLLAMA_PLACEHOLDER_KEY,
+    };
+  }
+
   return {
     provider,
     apiKey: process.env[provider.envKey]?.trim(),
@@ -94,7 +108,12 @@ export function resolveAIRequest(input: ResolveAIRequestInput): ResolvedAIReques
   const freeServerModel =
     model.features.isFree === true && model.availability.requiresPro === false;
 
-  if (input.isPro || freeServerModel) {
+  // A self-hosted instance has no paid tier, so every user reaches the server
+  // key. Local Ollama models are always server-side: there is no user key.
+  const canUseServerKey =
+    input.isPro || freeServerModel || SELF_HOST_UNLIMITED || model.provider === "ollama";
+
+  if (canUseServerKey) {
     const { apiKey } = getServerKey(model.provider);
 
     if (apiKey?.length) {
@@ -103,7 +122,8 @@ export function resolveAIRequest(input: ResolveAIRequestInput): ResolvedAIReques
         modelId: model.id,
         apiKey,
         usedServerKey: true,
-        requiresRateLimit: true,
+        // Ollama runs on your own hardware, so throttling it protects nothing.
+        requiresRateLimit: model.provider !== "ollama",
       };
     }
   }
@@ -111,7 +131,9 @@ export function resolveAIRequest(input: ResolveAIRequestInput): ResolvedAIReques
   const userApiKey = findUserKey(input.apiKeys, model.provider);
   if (!userApiKey) {
     throw new AIRequestAccessError(
-      `${provider.name} API key not found in user configuration`,
+      SELF_HOST_UNLIMITED
+        ? `No ${provider.name} API key configured. Set ${provider.envKey} in this deployment's environment, or add a personal ${provider.name} key in Settings.`
+        : `${provider.name} API key not found in user configuration`,
       "missing_api_key",
       model.id,
     );

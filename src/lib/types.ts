@@ -202,11 +202,14 @@ export const AI_PROVIDERS = {
 export type AIProviderOld = typeof AI_PROVIDERS[keyof typeof AI_PROVIDERS];
 
 // ServiceName is used across the app for API key management
-export type ServiceName = 
+export type ServiceName =
   | 'openai'
   // | 'azure'
   | 'anthropic'
-  | 'openrouter';
+  | 'openrouter'
+  // Local models served through Ollama's OpenAI-compatible API. Costs nothing
+  // per request; requires an Ollama server this deployment can reach.
+  | 'ollama';
   // | 'bedrock'
   // | 'google'
   // | 'vertex'

@@ -42,7 +42,20 @@ export function createAIClientFromResolvedRequest(
         }
       })(resolved.modelId) as LanguageModelV1;
       break;
-    
+
+    case 'ollama':
+      // Ollama speaks the OpenAI chat-completions protocol, so the OpenAI SDK
+      // drives it with only a base URL change. 'compatibility: compatible'
+      // relaxes strict-mode field checks that Ollama does not implement.
+      // Model IDs carry an "ollama/" prefix internally to keep them unique in
+      // the catalog; Ollama itself expects the bare tag (e.g. "llama3.1:8b").
+      baseModel = createOpenAI({
+        apiKey: resolved.apiKey,
+        baseURL: process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434/v1',
+        compatibility: 'compatible'
+      })(resolved.modelId.replace(/^ollama\//, '')) as LanguageModelV1;
+      break;
+
     default:
       throw new Error(`Unsupported provider: ${resolved.providerId}`);
   }

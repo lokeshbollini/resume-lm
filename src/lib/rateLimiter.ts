@@ -1,5 +1,10 @@
 // utils/rateLimiter.ts
-import redis from '@/lib/redis';
+import redis, { isRedisConfigured } from '@/lib/redis';
+
+function envNumber(name: string, fallback: number): number {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 /**
  * Checks and updates the leaky bucket for a given user.
@@ -11,11 +16,19 @@ import redis from '@/lib/redis';
  */
 export async function checkRateLimit(
   userId: string,
-  capacity: number = 80,
-  duration: number = 5 * 60 * 60 // 5 hours in seconds
+  capacity: number = envNumber('AI_RATE_LIMIT_CAPACITY', 80),
+  duration: number = envNumber('AI_RATE_LIMIT_WINDOW_SECONDS', 5 * 60 * 60)
 ): Promise<void> {
   // Skip rate limiting in development environment
   if (process.env.NODE_ENV === 'development') {
+    return;
+  }
+
+  // Without Redis there is nowhere to keep the bucket. Skipping is the only
+  // option that keeps the app usable, but it means an unmetered instance:
+  // if you share this deployment, configure Redis so one user cannot run up
+  // your provider bill on their own.
+  if (!isRedisConfigured()) {
     return;
   }
 

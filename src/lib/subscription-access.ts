@@ -1,4 +1,26 @@
 import { getBillingState, type BillingState } from "@/lib/billing/state";
+import { SELF_HOST_UNLIMITED } from "@/lib/self-host";
+
+/**
+ * The access state every user gets on a self-hosted instance: full Pro access,
+ * no trial to start, no renewal date, nothing expiring.
+ */
+const SELF_HOSTED_ACCESS_STATE: SubscriptionAccessState = {
+  billingState: "active",
+  isTrialing: false,
+  isPastDue: false,
+  isWithinAccessWindow: true,
+  hasStripeSubscription: false,
+  hasProAccess: true,
+  isCanceling: false,
+  isExpiredProAccess: false,
+  needsTrial: false,
+  daysRemaining: 0,
+  trialDaysRemaining: 0,
+  currentPeriodEndLabel: null,
+  trialEndLabel: null,
+  effectivePlan: "pro",
+};
 
 export interface SubscriptionSnapshot {
   subscription_plan?: string | null;
@@ -59,6 +81,11 @@ export function getSubscriptionAccessState(
   subscription: SubscriptionSnapshot | null | undefined,
   now: Date = new Date()
 ): SubscriptionAccessState {
+  // Single chokepoint for the paywall: `hasProAccess` from here decides resume
+  // limits, premium model access, the upgrade button, and the settings page.
+  // Short-circuiting it unlocks all of them without touching each call site.
+  if (SELF_HOST_UNLIMITED) return SELF_HOSTED_ACCESS_STATE;
+
   const plan = subscription?.subscription_plan?.toLowerCase() ?? "";
   const status = subscription?.subscription_status ?? "";
 
