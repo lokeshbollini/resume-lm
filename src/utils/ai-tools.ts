@@ -8,6 +8,7 @@ import {
   type ResolvedAIRequest,
 } from '@/lib/ai/access-control';
 import { createAIModelReliabilityMiddleware } from '@/lib/ai/reliability';
+import { createObjectJsonModeMiddleware } from '@/lib/ai/object-json-mode';
 
 // Re-export types for backward compatibility
 export type { ApiKey, AIConfig } from '@/lib/ai-models';
@@ -58,6 +59,15 @@ export function createAIClientFromResolvedRequest(
 
     default:
       throw new Error(`Unsupported provider: ${resolved.providerId}`);
+  }
+
+  // Local models are far better at "return this JSON" than at emitting a
+  // well-formed function call, and generateObject defaults to the latter.
+  if (resolved.providerId === 'ollama') {
+    baseModel = wrapLanguageModel({
+      model: baseModel,
+      middleware: createObjectJsonModeMiddleware(),
+    }) as LanguageModelV1;
   }
 
   return wrapLanguageModel({
