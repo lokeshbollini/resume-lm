@@ -33,7 +33,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ProUpgradeButton } from "@/components/settings/pro-upgrade-button";
 import { AlertTriangle } from "lucide-react";
 import { importResume, updateProfile } from "@/utils/actions/profiles/actions";
-import { getStoredModelSelection, MODEL_DESIGNATIONS } from "@/lib/ai-models";
+import { getDefaultModel, getStoredModelSelection } from "@/lib/ai-models";
 import { cn, withBasePath } from "@/lib/utils";
 import pdfToText from "react-pdftotext";
 
@@ -151,7 +151,7 @@ export function ProfileEditForm({ profile: initialProfile }: ProfileEditFormProp
       // Get model and API key from local storage
       const LOCAL_STORAGE_KEY = 'resumelm-api-keys';
       
-      const selectedModel = getStoredModelSelection(MODEL_DESIGNATIONS.DEFAULT_FREE);
+      const selectedModel = getStoredModelSelection(getDefaultModel(false));
       const storedKeys = localStorage.getItem(LOCAL_STORAGE_KEY);
       let apiKeys = [];
       

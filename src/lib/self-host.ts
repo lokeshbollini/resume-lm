@@ -26,3 +26,22 @@ export const SELF_HOST_UNLIMITED =
 export function isSelfHostUnlimited(): boolean {
   return SELF_HOST_UNLIMITED;
 }
+
+/**
+ * The model this instance falls back to when no explicit choice was made.
+ *
+ * Upstream hardcodes every task default to an OpenRouter model (see
+ * MODEL_DESIGNATIONS), because the hosted product funds those. A self-hosted
+ * instance with, say, only Ollama or only an Anthropic key has no way to reach
+ * those defaults, so any server action that runs without a user-selected model
+ * — text import, resume scoring, cover letters — fails with "no API key
+ * configured" no matter what is in the model picker.
+ *
+ * Set NEXT_PUBLIC_SELF_HOST_DEFAULT_MODEL to a model ID this deployment can
+ * actually serve, e.g. "ollama/llama3.1:8b" or "claude-sonnet-5".
+ *
+ * This is a fallback, not an override: an explicit selection in the model
+ * picker still wins, so the picker keeps working as expected.
+ */
+export const SELF_HOST_DEFAULT_MODEL =
+  process.env.NEXT_PUBLIC_SELF_HOST_DEFAULT_MODEL?.trim() || "";

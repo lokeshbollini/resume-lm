@@ -36,7 +36,7 @@ import { ApiKeyErrorAlert } from '@/components/ui/api-key-error-alert';
 import { Textarea } from '@/components/ui/textarea';
 import { useApiKeys, useDefaultModel } from '@/hooks/use-api-keys';
 import { useCustomPrompts } from '@/hooks/use-custom-prompts';
-import { MODEL_DESIGNATIONS } from '@/lib/ai-models';
+import { getDefaultModel } from '@/lib/ai-models';
 
 interface ChatBotProps {
   resume: Resume;
@@ -105,7 +105,8 @@ export default function ChatBot({ resume, onResumeChange, job }: ChatBotProps) {
         chatError instanceof Error &&
         /model is unavailable|unknown model|invalid model/i.test(chatError.message)
       ) {
-        setDefaultModel(MODEL_DESIGNATIONS.FAST_CHEAP_FREE);
+        // Recover onto a model this deployment can actually serve.
+        setDefaultModel(getDefaultModel(false));
       }
       setIsInitialLoading(false);
     },

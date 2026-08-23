@@ -11,7 +11,7 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import replaceSpecialCharacters from 'replace-special-characters'
 import { ModelSelector } from "@/components/shared/model-selector"
-import { AI_MODELS, MODEL_DESIGNATIONS, getProvidersArray } from "@/lib/ai-models"
+import { AI_MODELS, MODEL_DESIGNATIONS, getDefaultModel, getProvidersArray } from "@/lib/ai-models"
 import { useApiKeys, useDefaultModel } from "@/hooks/use-api-keys"
 
 export function ApiKeysForm({ isProPlan }: { isProPlan: boolean }) {
@@ -34,11 +34,11 @@ export function ApiKeysForm({ isProPlan }: { isProPlan: boolean }) {
     
     // Only set default if there's no model selected
     if (!defaultModel) {
-      if (isProPlan) {
-        setDefaultModel(MODEL_DESIGNATIONS.DEFAULT_PRO)
-      } else {
-        setDefaultModel(MODEL_DESIGNATIONS.DEFAULT_FREE)
-      }
+      // getDefaultModel honours NEXT_PUBLIC_SELF_HOST_DEFAULT_MODEL. Writing a
+      // raw designation here would persist an OpenRouter model into local
+      // storage on a deployment that cannot reach OpenRouter — and from then on
+      // every request would send it explicitly, defeating the server fallback.
+      setDefaultModel(getDefaultModel(isProPlan))
     }
   }, [defaultModel, isProPlan, setDefaultModel])
 

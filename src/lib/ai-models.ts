@@ -4,7 +4,7 @@
  */
 
 import { ServiceName } from './types'
-import { SELF_HOST_UNLIMITED } from './self-host'
+import { SELF_HOST_UNLIMITED, SELF_HOST_DEFAULT_MODEL } from './self-host'
 
 // ========================
 // Type Definitions
@@ -553,6 +553,8 @@ export function isModelAvailable(
  * Get the default model for a user type
  */
 export function getDefaultModel(isPro: boolean): string {
+  // A self-hosted instance may not have a key for the app-funded defaults.
+  if (SELF_HOST_DEFAULT_MODEL) return SELF_HOST_DEFAULT_MODEL
   return isPro ? DEFAULT_MODELS.PRO_USER : DEFAULT_MODELS.FREE_USER
 }
 

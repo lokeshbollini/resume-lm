@@ -5,6 +5,7 @@ import {
   type ApiKey,
 } from "@/lib/ai-models";
 import type { CustomPrompts } from "@/lib/types";
+import { SELF_HOST_DEFAULT_MODEL } from "@/lib/self-host";
 
 export type AITaskModel =
   | "structuredExtraction"
@@ -34,6 +35,11 @@ function getConfigParts(config?: AIConfig): TaskModelConfigParts {
 }
 
 export function getTaskModel(task: AITaskModel, isPro: boolean): string {
+  // Every designation below is an OpenRouter model that the hosted product
+  // funds. A self-hosted instance that cannot reach OpenRouter needs its own
+  // default, or these tasks fail before a model is ever contacted.
+  if (SELF_HOST_DEFAULT_MODEL) return SELF_HOST_DEFAULT_MODEL;
+
   switch (task) {
     case "structuredExtraction":
       return MODEL_DESIGNATIONS.STRUCTURED_EXTRACTION;
