@@ -15,7 +15,35 @@ const useLocalRedis = process.env.USE_LOCAL_REDIS === "true";
 
 function createRedisClient(): RedisClient {
   if (useLocalRedis && process.env.REDIS_URL) {
-    const client = new IORedis(process.env.REDIS_URL);
+    const client = new IORedis(process.env.REDIS_URL, {
+      // Without a bound on retries, a Redis that is configured but not running
+      // (REDIS_URL copied from .env.example with no server on :6379) reconnects
+      // forever and every command hangs until it does.
+      maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
+      connectTimeout: 2000,
+      retryStrategy(times) {
+        if (times > 3) return null; // stop reconnecting
+        return Math.min(times * 200, 1000);
+      },
+    });
+
+    // ioredis emits 'error' on every failed connection attempt. With no
+    // listener attached, Node logs "[ioredis] Unhandled error event" for each
+    // one and an EventEmitter 'error' with no handler can take down the
+    // process. Log the first, then stay quiet.
+    let loggedConnectionError = false;
+    client.on("error", (error: Error) => {
+      if (!loggedConnectionError) {
+        loggedConnectionError = true;
+        console.warn(
+          `[redis] unavailable at ${process.env.REDIS_URL} (${error.message}). ` +
+            "Rate limiting is disabled until it comes back. Set USE_LOCAL_REDIS=false " +
+            "if you did not mean to run a local Redis.",
+        );
+      }
+    });
+
     return {
       hgetall: (key) => client.hgetall(key).then(r => Object.keys(r).length ? r : null),
       hset: (key, data) => client.hset(key, data),

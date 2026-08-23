@@ -45,3 +45,19 @@ export function isSelfHostUnlimited(): boolean {
  */
 export const SELF_HOST_DEFAULT_MODEL =
   process.env.NEXT_PUBLIC_SELF_HOST_DEFAULT_MODEL?.trim() || "";
+
+/**
+ * Whether to show the "Continue with Google" button.
+ *
+ * Google sign-in needs a provider configured in the Supabase dashboard, backed
+ * by an OAuth client in Google Cloud. A fresh self-hosted project has neither,
+ * so the button is present but always fails with
+ * "Unsupported provider: provider is not enabled" — an error the user can do
+ * nothing about, on the very first screen they see.
+ *
+ * So a self-hosted instance opts *in* once Google is actually configured, while
+ * the hosted product keeps its existing behaviour and can opt out.
+ */
+export const GOOGLE_AUTH_ENABLED = SELF_HOST_UNLIMITED
+  ? process.env.NEXT_PUBLIC_ENABLE_GOOGLE_AUTH === "true"
+  : process.env.NEXT_PUBLIC_ENABLE_GOOGLE_AUTH !== "false";

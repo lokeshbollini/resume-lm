@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AuthIntent } from "@/lib/auth-intent";
+import { GOOGLE_AUTH_ENABLED } from "@/lib/self-host";
 
 export type AuthTab = "login" | "signup";
 
@@ -43,6 +44,10 @@ function TabButton({ value, children }: { value: AuthTab; children: React.ReactN
 function SocialAuth({ showDivider = true, intent }: { showDivider?: boolean; intent?: AuthIntent }) {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>();
+
+  // Nothing to render when this deployment has no Google provider configured.
+  // Hooks stay above this line so the hook order never changes between renders.
+  if (!GOOGLE_AUTH_ENABLED) return null;
 
   const handleGoogleSignIn = async () => {
     setErrorMessage(undefined);

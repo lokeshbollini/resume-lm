@@ -18,6 +18,8 @@ export interface AIProvider {
   envKey: string
   sdkInitializer: string
   unstable?: boolean
+  /** Provider that needs no credential (a local server). Hidden from Settings. */
+  keyless?: boolean
 }
 
 export interface AIModel {
@@ -98,7 +100,10 @@ export const PROVIDERS: Partial<Record<ServiceName, AIProvider>> = {
     apiLink: 'https://ollama.com/download',
     envKey: 'OLLAMA_API_KEY',
     sdkInitializer: 'ollama',
-    unstable: false
+    unstable: false,
+    // A local Ollama server ignores the Authorization header entirely, so
+    // there is no key for a user to obtain, paste, or manage.
+    keyless: true
   },
 }
 
@@ -489,7 +494,14 @@ export function getProvidersArray(): AIProvider[] {
   // Include providers that still have hidden compatibility models so existing
   // BYOK users can continue to manage their keys in Settings.
   const selectableProviders = new Set(AI_MODELS.map(model => model.provider))
-  return Object.values(PROVIDERS).filter(provider => selectableProviders.has(provider.id))
+  return Object.values(PROVIDERS).filter(
+    provider =>
+      selectableProviders.has(provider.id) &&
+      // Keyless providers have nothing to paste. Rendering an "Enter API key"
+      // box and a "Get your API key" link for a local Ollama server just
+      // invites people to hunt for a credential that does not exist.
+      !provider.keyless,
+  )
 }
 
 /**

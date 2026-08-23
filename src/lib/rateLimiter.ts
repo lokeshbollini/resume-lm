@@ -36,8 +36,18 @@ export async function checkRateLimit(
   const redisKey = `rate-limit:pro:${userId}`;
   const now = Date.now() / 1000; // current time in seconds
 
-  // Get existing bucket data from Redis.
-  const bucket = await redis.hgetall(redisKey);
+  // Get existing bucket data from Redis. A Redis that is configured but not
+  // reachable must not take the AI request down with it: the limiter protects
+  // your provider bill, it is not part of the request's correctness. Fail open
+  // and let the request through rather than returning a 500 the user cannot act
+  // on. The warning in redis.ts fires once so this stays visible.
+  let bucket: Record<string, string> | null;
+  try {
+    bucket = await redis.hgetall(redisKey);
+  } catch {
+    return;
+  }
+
   let tokens: number;
   let last: number;
 
@@ -46,7 +56,11 @@ export async function checkRateLimit(
     tokens = 0;
     last = now;
     // Set an expiration a bit longer than the duration so that stale data is removed.
-    await redis.expire(redisKey, duration + 3600);
+    try {
+      await redis.expire(redisKey, duration + 3600);
+    } catch {
+      return;
+    }
   } else {
     tokens = parseFloat(bucket.tokens as string);
     last = parseFloat(bucket.last as string);
@@ -66,6 +80,12 @@ export async function checkRateLimit(
   }
 
   // Update the bucket in Redis with the new token count and current timestamp.
-  await redis.hset(redisKey, { tokens: newTokens.toString(), last: now.toString() });
-  await redis.expire(redisKey, duration + 3600);
+  // A write failure here means this request goes unmetered; that is strictly
+  // better than failing a request that was already found to be within budget.
+  try {
+    await redis.hset(redisKey, { tokens: newTokens.toString(), last: now.toString() });
+    await redis.expire(redisKey, duration + 3600);
+  } catch {
+    // Intentionally ignored — see above.
+  }
 }
