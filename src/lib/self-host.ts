@@ -58,6 +58,37 @@ export const SELF_HOST_DEFAULT_MODEL =
  * So a self-hosted instance opts *in* once Google is actually configured, while
  * the hosted product keeps its existing behaviour and can opt out.
  */
+/**
+ * Which providers this instance actually offers, e.g. "ollama,groq".
+ *
+ * Without this, the model picker lists every model in the catalog — including
+ * eight OpenRouter-routed ones — and picking any of them fails with "No
+ * OpenRouter API key configured". Note that "Claude Opus 5" and "Claude Opus 5
+ * (Anthropic key)" are two different entries routed through two different
+ * providers, which is exactly the kind of trap this removes.
+ *
+ * Set it and the picker shows only what this deployment can serve. Personal
+ * BYOK keys added in Settings still unlock their own provider on top of this.
+ *
+ * Leave it unset to keep the full upstream catalog.
+ */
+export const SELF_HOST_PROVIDERS: readonly string[] = (
+  process.env.NEXT_PUBLIC_SELF_HOST_PROVIDERS ?? ""
+)
+  .split(",")
+  .map((id) => id.trim().toLowerCase())
+  .filter((id) => id.length > 0);
+
+/** True when the instance has declared an explicit provider allow-list. */
+export function hasProviderAllowList(): boolean {
+  return SELF_HOST_PROVIDERS.length > 0;
+}
+
+export function isProviderEnabled(providerId: string): boolean {
+  if (!hasProviderAllowList()) return true;
+  return SELF_HOST_PROVIDERS.includes(providerId.toLowerCase());
+}
+
 export const GOOGLE_AUTH_ENABLED = SELF_HOST_UNLIMITED
   ? process.env.NEXT_PUBLIC_ENABLE_GOOGLE_AUTH === "true"
   : process.env.NEXT_PUBLIC_ENABLE_GOOGLE_AUTH !== "false";

@@ -4,7 +4,12 @@
  */
 
 import { ServiceName } from './types'
-import { SELF_HOST_UNLIMITED, SELF_HOST_DEFAULT_MODEL } from './self-host'
+import {
+  SELF_HOST_UNLIMITED,
+  SELF_HOST_DEFAULT_MODEL,
+  hasProviderAllowList,
+  isProviderEnabled,
+} from './self-host'
 
 // ========================
 // Type Definitions
@@ -105,6 +110,14 @@ export const PROVIDERS: Partial<Record<ServiceName, AIProvider>> = {
     // there is no key for a user to obtain, paste, or manage.
     keyless: true
   },
+  groq: {
+    id: 'groq',
+    name: 'Groq',
+    apiLink: 'https://console.groq.com/keys',
+    envKey: 'GROQ_API_KEY',
+    sdkInitializer: 'groq',
+    unstable: false
+  },
 }
 
 // ========================
@@ -122,23 +135,63 @@ export const PROVIDERS: Partial<Record<ServiceName, AIProvider>> = {
  * Ollama from the model picker entirely.
  */
 function buildOllamaModels(): AIModel[] {
-  const raw = process.env.NEXT_PUBLIC_OLLAMA_MODELS?.trim()
+  return buildEnvModels({
+    raw: process.env.NEXT_PUBLIC_OLLAMA_MODELS,
+    provider: 'ollama',
+    label: (tag) => `${tag} (local)`,
+    maxTokens: 128000,
+  })
+}
+
+/**
+ * Groq serves open-weight models (Llama, Qwen, Kimi, gpt-oss) on dedicated
+ * hardware, with a free tier that is generous enough for personal use. It is
+ * the natural middle ground between a local 8B model and a paid frontier API:
+ * genuinely fast, genuinely free to start, and strong enough at tool calling
+ * and JSON output to drive resume extraction.
+ *
+ * Set NEXT_PUBLIC_GROQ_MODELS to a comma-separated list of model IDs from
+ * https://console.groq.com/docs/models, plus GROQ_API_KEY in the server
+ * environment.
+ */
+function buildGroqModels(): AIModel[] {
+  return buildEnvModels({
+    raw: process.env.NEXT_PUBLIC_GROQ_MODELS,
+    provider: 'groq',
+    label: (id) => `${id} (Groq)`,
+    maxTokens: 128000,
+  })
+}
+
+/**
+ * Which models exist on a self-hosted instance is a property of that
+ * deployment, not of this repo, so both open-model providers build their
+ * catalog from an env variable rather than a hardcoded list.
+ */
+function buildEnvModels(input: {
+  raw?: string
+  provider: ServiceName
+  label: (id: string) => string
+  maxTokens: number
+}): AIModel[] {
+  const raw = input.raw?.trim()
   if (!raw) return []
 
   return raw
     .split(',')
-    .map(tag => tag.trim())
-    .filter(tag => tag.length > 0)
-    .map(tag => ({
-      id: `ollama/${tag}`,
-      name: `${tag} (local)`,
-      provider: 'ollama' as ServiceName,
+    .map(id => id.trim())
+    .filter(id => id.length > 0)
+    .map(id => ({
+      // Namespaced so a bare model ID can never collide with another
+      // provider's. The prefix is stripped again before the request goes out.
+      id: `${input.provider}/${id}`,
+      name: input.label(id),
+      provider: input.provider,
       features: {
-        // Free in the literal sense: the request never leaves your machine.
         isFree: true,
         isRecommended: false,
         isUnstable: false,
-        maxTokens: 128000,
+        maxTokens: input.maxTokens,
         supportsVision: false,
         supportsTools: true,
       },
@@ -330,18 +383,28 @@ export const AI_MODELS: AIModel[] = [
     }
   },
   ...buildOllamaModels(),
+  ...buildGroqModels(),
 ].map(applySelfHostOverrides)
 
 /**
- * On a self-hosted instance there is no paid tier and no app-funded key to
- * protect, so nothing needs to stay Pro-only or hidden. The direct-Anthropic
- * entries in particular stop being BYOK-only compatibility targets and become
- * first-class options backed by this deployment's own ANTHROPIC_API_KEY.
+ * On a self-hosted instance there is no paid tier to protect, so nothing needs
+ * to stay Pro-only. Visibility is a separate question: a model this deployment
+ * has no key for is worse than useless in the picker, because choosing it
+ * produces a 403 naming a provider the user never heard of. So when the
+ * instance declares which providers it offers, everything else is hidden.
  */
 function applySelfHostOverrides(model: AIModel): AIModel {
   if (!SELF_HOST_UNLIMITED) return model
 
+  const enabled = isProviderEnabled(model.provider)
+
+  void enabled
+
   return {
+    // Visibility stays open here and the allow-list is applied in
+    // groupModelsByProvider() instead, so that a personal key can still reveal
+    // a provider the instance does not fund. Hiding at this layer would make
+    // BYOK impossible to reach.
     ...model,
     isVisible: true,
     availability: {
@@ -537,11 +600,15 @@ export function isModelAvailable(
   const model = getModelById(modelId)
   if (!model) return false
 
-  // A self-hosted instance funds every model with its own keys, so the picker
-  // offers all of them. If the matching key is missing the server returns a
-  // "no API key configured" error naming the provider, which is a clearer
-  // signal than silently hiding the model.
-  if (SELF_HOST_UNLIMITED) return true
+  if (SELF_HOST_UNLIMITED) {
+    // Offered by this instance, or unlocked by the user's own key.
+    return (
+      isProviderEnabled(model.provider) ||
+      apiKeys.some(
+        key => key.service === model.provider && key.key.trim().length > 0,
+      )
+    )
+  }
 
   if (model.availability.requiresPro && !isPro) return false
 
@@ -582,12 +649,20 @@ export function getModelProvider(modelId: string): AIProvider | undefined {
 /**
  * Group models by provider for display
  */
-export function groupModelsByProvider(): GroupedModels[] {
-  const providerOrder: ServiceName[] = ['anthropic', 'openai', 'openrouter', 'ollama']
+export function groupModelsByProvider(apiKeys: ApiKey[] = []): GroupedModels[] {
+  const providerOrder: ServiceName[] = ['ollama', 'groq', 'anthropic', 'openai', 'openrouter']
   const grouped = new Map<ServiceName, AIModel[]>()
 
-  // Group models by provider
-  AI_MODELS.filter(model => model.isVisible !== false).forEach(model => {
+  // Group models by provider. When the instance declares which providers it
+  // offers, drop everything it cannot serve — a model that can only ever
+  // return "No <provider> API key configured" is worse than absent. Personal
+  // keys count as offering a provider, so BYOK still reaches the picker.
+  // With no allow-list this is a no-op and the full catalog is grouped.
+  AI_MODELS.filter(
+    model =>
+      model.isVisible !== false &&
+      (!hasProviderAllowList() || isModelAvailable(model.id, true, apiKeys)),
+  ).forEach(model => {
     if (!grouped.has(model.provider)) {
       grouped.set(model.provider, [])
     }

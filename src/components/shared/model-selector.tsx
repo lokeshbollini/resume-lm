@@ -144,8 +144,9 @@ export function ModelSelector({
     }
   }
 
-  // Use the centralized grouping function
-  const getModelsByProvider = () => groupModelsByProvider()
+  // Pass the user's keys so a BYOK provider still appears on an instance that
+  // has declared a provider allow-list.
+  const getModelsByProvider = () => groupModelsByProvider(apiKeys)
 
   return (
     <Select value={value} onValueChange={handleModelChange}>

@@ -209,7 +209,10 @@ export type ServiceName =
   | 'openrouter'
   // Local models served through Ollama's OpenAI-compatible API. Costs nothing
   // per request; requires an Ollama server this deployment can reach.
-  | 'ollama';
+  | 'ollama'
+  // Hosted open-weight models (Llama, Qwen, Kimi, gpt-oss) on Groq, which has
+  // a free tier. Much faster and far more capable than local 8B models.
+  | 'groq';
   // | 'bedrock'
   // | 'google'
   // | 'vertex'

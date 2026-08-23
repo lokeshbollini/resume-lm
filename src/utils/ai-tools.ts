@@ -1,6 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { createGroq } from '@ai-sdk/groq';
 import { LanguageModelV1, wrapLanguageModel } from 'ai';
 import { type AIConfig } from '@/lib/ai-models';
 import {
@@ -54,7 +55,21 @@ export function createAIClientFromResolvedRequest(
         apiKey: resolved.apiKey,
         baseURL: process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434/v1',
         compatibility: 'compatible'
-      })(resolved.modelId.replace(/^ollama\//, '')) as LanguageModelV1;
+      })(resolved.modelId.replace(/^ollama\//, ''), {
+        // Ollama implements OpenAI's json_schema response format. Combined
+        // with the object-json middleware below, this sends the schema to the
+        // model as a constraint instead of hoping it emits a function call —
+        // which is what small models fail at.
+        structuredOutputs: true,
+      }) as LanguageModelV1;
+      break;
+
+    case 'groq':
+      // Open-weight models on Groq's hardware. Same "provider/" prefix scheme
+      // as Ollama, stripped before the request goes out.
+      baseModel = createGroq({
+        apiKey: resolved.apiKey,
+      })(resolved.modelId.replace(/^groq\//, '')) as LanguageModelV1;
       break;
 
     default:
