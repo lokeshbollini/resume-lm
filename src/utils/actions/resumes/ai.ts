@@ -93,15 +93,23 @@ export async function convertTextToResume(prompt: string, existingResume: Resume
             - If only one educational entry exists, include it.
             - If multiple entries exist, select the one(s) most relevant to the target role.
 
-        2. **Formatting & Emphasis:**
+        2. **Section mapping — the most common failure, read carefully:**
+          - The resume's own headings are authoritative. Text under EXPERIENCE, WORK EXPERIENCE or EMPLOYMENT is work_experience, even when a bullet describes a project the person built.
+          - work_experience = a role held at an employer: a job title, a company, and dates. **Every bullet under one job belongs to that same entry's description array.** Never turn individual bullets into separate entries, and never move them into projects.
+          - projects = named, standalone work under its own PROJECTS heading — personal, academic or open-source work not performed for an employer.
+          - If the resume has no separate projects section, return an empty projects array. Do not manufacture one by moving job bullets into it.
+          - Keep every employer from the resume, in the original order, one entry per role.
+
+        3. **Formatting & Emphasis:**
           - Transform the resume into a JSON object following the schema, with sections such as basic information, professional experience, projects, skills, and education.
           - Preserve all original details, dates, and descriptions. Only modify the text for formatting purposes.
           - **Enhance relevance by marking keywords** within work experience descriptions, project details, achievements, and education details with bold formatting (i.e., wrap them with two asterisks like **this**). Apply this only to keywords or phrases that are highly relevant to the target role.
           - Do not add any formatting to section titles or headers.
           - Use empty arrays ([]) for any sections that do not contain relevant items.
 
-        3. **Output Requirements:**
+        4. **Output Requirements:**
           - The final output must be a valid JSON object that adheres to the specified schema.
+          - Arrays must be real JSON arrays, never a string containing JSON.
           - Include only the most relevant items, optimized for the target role.
           - Do not add any new information or rephrase the provided content—only apply minor formatting (like bolding) to emphasize key points.
         `,

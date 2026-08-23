@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { tolerantArray, tolerantStringArray } from '@/lib/ai/tolerant-json';
 
 // Base schemas for reusable components
 export const workExperienceSchema = z.object({
@@ -48,32 +49,32 @@ export const textImportSchema = z.object({
   github_url: z.string().optional(),
   
   // Resume Sections
-  work_experience: z.array(z.object({
+  work_experience: tolerantArray(z.object({
     company: z.string(),
     position: z.string(),
     date: z.string(),
-    description: z.array(z.string()),
-    technologies: z.array(z.string()).optional(),
+    description: tolerantStringArray(),
+    technologies: tolerantStringArray().optional(),
     location: z.string().optional(),
   })).optional(),
-  education: z.array(z.object({
+  education: tolerantArray(z.object({
     school: z.string(),
     degree: z.string(),
     field: z.string().optional(),
     date: z.string().optional(),
-    description: z.array(z.string()).optional(),
+    description: tolerantStringArray().optional(),
     gpa: z.string().optional(),
     location: z.string().optional(),
-    achievements: z.array(z.string()).optional(),
+    achievements: tolerantStringArray().optional(),
   })).optional(),
-  skills: z.array(z.object({
+  skills: tolerantArray(z.object({
     category: z.string(),
-    items: z.array(z.string()),
+    items: tolerantStringArray(),
   })).optional(),
-  projects: z.array(z.object({
+  projects: tolerantArray(z.object({
     name: z.string(),
-    description: z.array(z.string()),
-    technologies: z.array(z.string()).optional(),
+    description: tolerantStringArray(),
+    technologies: tolerantStringArray().optional(),
     date: z.string().optional(),
     url: z.string().optional(),
     github_url: z.string().optional(),

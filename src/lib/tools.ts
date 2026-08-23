@@ -1,5 +1,6 @@
 import { tool as createTool } from 'ai';
 import { z } from 'zod';
+import { tolerantArray, tolerantStringArray } from '@/lib/ai/tolerant-json';
 
 export const getResumeTool = createTool({
   description: 'Get the user Resume. Can request specific sections or "all" for the entire resume.',
@@ -27,8 +28,8 @@ export const suggestWorkExperienceTool = createTool({
       company: z.string(),
       location: z.string().optional(),
       position: z.string(),
-      description: z.array(z.string()),
-      technologies: z.array(z.string()).optional(),
+      description: tolerantStringArray(),
+      technologies: tolerantStringArray().optional(),
     }).describe('Improved version of the work experience entry. For important keywords, format them as bold, like this: **keyword**. Put two asterisks around the keyword or phrase.'),
   }),
 });
@@ -39,9 +40,9 @@ export const suggestProjectTool = createTool({
     index: z.number().describe('Index of the project entry to improve'),
     improved_project: z.object({
       name: z.string(),
-      description: z.array(z.string()),
+      description: tolerantStringArray(),
       date: z.string().optional(),
-      technologies: z.array(z.string()).optional(),
+      technologies: tolerantStringArray().optional(),
       url: z.string().optional(),
       github_url: z.string().optional(),
     }).describe('Improved version of the project entry. For important keywords, format them as bold, like this: **keyword**. Put two asterisks around the keyword or phrase.'),
@@ -54,7 +55,7 @@ export const suggestSkillTool = createTool({
     index: z.number().describe('Index of the skill category to improve'),
     improved_skill: z.object({
       category: z.string(),
-      items: z.array(z.string()),
+      items: tolerantStringArray(),
     }).describe('Improved version of the skill category. ONLY use this tool to add NEW skills or REMOVE existing skills, DO NOT ADD IN EXISTING SKILLS IN ANY WAY.'),
   }),
 });
@@ -70,7 +71,7 @@ export const suggestEducationTool = createTool({
       location: z.string().optional(),
       date: z.string(),
       gpa: z.string().optional(),
-      achievements: z.array(z.string()).optional(),
+      achievements: tolerantStringArray().optional(),
     }).describe('Improved version of the education entry. For important keywords, format them as bold, like this: **keyword**. Put two asterisks around the keyword or phrase.'),
   }),
 });
@@ -88,32 +89,32 @@ export const modifyWholeResumeTool = createTool({
       linkedin_url: z.string().optional(),
       github_url: z.string().optional(),
     }).optional(),
-    work_experience: z.array(z.object({
+    work_experience: tolerantArray(z.object({
       company: z.string(),
       position: z.string(),
       location: z.string().optional(),
       date: z.string(),
-      description: z.array(z.string()),
-      technologies: z.array(z.string()).optional(),
+      description: tolerantStringArray(),
+      technologies: tolerantStringArray().optional(),
     })).optional(),
-    education: z.array(z.object({
+    education: tolerantArray(z.object({
       school: z.string(),
       degree: z.string(),
       field: z.string(),
       location: z.string().optional(),
       date: z.string(),
       gpa: z.string().optional(),
-      achievements: z.array(z.string()).optional(),
+      achievements: tolerantStringArray().optional(),
     })).optional(),
-    skills: z.array(z.object({
+    skills: tolerantArray(z.object({
       category: z.string(),
-      items: z.array(z.string()),
+      items: tolerantStringArray(),
     })).optional(),
-    projects: z.array(z.object({
+    projects: tolerantArray(z.object({
       name: z.string(),
-      description: z.array(z.string()),
+      description: tolerantStringArray(),
       date: z.string().optional(),
-      technologies: z.array(z.string()).optional(),
+      technologies: tolerantStringArray().optional(),
       url: z.string().optional(),
       github_url: z.string().optional(),
     })).optional(),

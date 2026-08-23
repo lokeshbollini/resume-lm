@@ -1,4 +1,5 @@
 'use client';
+import { joinDefined } from "@/lib/resume-text";
 
 import { WorkExperience, Project, Profile, Education, Skill } from "@/lib/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -76,7 +77,7 @@ export function ImportFromProfileDialog<T extends ImportItem>({
       return (item as Project).name;
     } else if (type === 'education') {
       const edu = item as Education;
-      return `${edu.degree} in ${edu.field}`;
+      return joinDefined([edu.degree, edu.field], " in ");
     } else {
       return (item as Skill).category;
     }

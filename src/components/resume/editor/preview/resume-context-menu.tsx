@@ -1,4 +1,5 @@
 'use client';
+import { joinDefined } from "@/lib/resume-text";
 
 import {
   ContextMenu,
@@ -87,7 +88,7 @@ export function ResumeContextMenu({ children, resume }: ResumeContextMenuProps) 
 
   const formatEducation = (edu: Education) => {
     const lines = [
-      `${edu.degree} in ${edu.field}`,
+      joinDefined([edu.degree, edu.field], " in "),
       edu.school,
       edu.location ? `Location: ${edu.location}` : '',
       `Date: ${edu.date}`,

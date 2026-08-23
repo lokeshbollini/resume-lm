@@ -1,4 +1,5 @@
 'use client';
+import { joinDefined } from "@/lib/resume-text";
 
 import { Resume } from "@/lib/types";
 import { Document as PDFDocument, Page as PDFPage, Text, View, StyleSheet, Link, Image } from '@react-pdf/renderer';
@@ -270,7 +271,7 @@ const EducationSection = memo(function EducationSection({
           <View style={styles.educationHeader}>
             <View>
               <Text style={styles.schoolName}>{processText(edu.school, true)}</Text>
-              <Text style={styles.degree}>{processText(`${edu.degree} ${edu.field}`)}</Text>
+              <Text style={styles.degree}>{processText(joinDefined([edu.degree, edu.field]))}</Text>
             </View>
             <Text style={styles.dateRange}>{edu.date}</Text>
           </View>
