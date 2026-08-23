@@ -1,5 +1,6 @@
 'use client';
 import { joinDefined } from "@/lib/resume-text";
+import { getSectionOrder, isSectionVisible } from "@/lib/resume-section-order";
 
 import { Resume } from "@/lib/types";
 import { Document as PDFDocument, Page as PDFPage, Text, View, StyleSheet, Link, Image } from '@react-pdf/renderer';
@@ -22,8 +23,32 @@ const baseStyles = {
   },
 } as const;
 
-// Create a cache outside of components to persist between renders
+// Cache persists between renders. Bounded, because the editor re-renders on
+// every keystroke and an unbounded Map would grow for the life of the tab.
+const TEXT_CACHE_LIMIT = 2000;
 const textProcessingCache = new Map<string, ReactNode[]>();
+
+function cacheProcessedText(key: string, value: ReactNode[]): ReactNode[] {
+  if (textProcessingCache.size >= TEXT_CACHE_LIMIT) {
+    // Map preserves insertion order, so this evicts the oldest entry.
+    const oldest = textProcessingCache.keys().next().value;
+    if (oldest !== undefined) textProcessingCache.delete(oldest);
+  }
+  textProcessingCache.set(key, value);
+  return value;
+}
+
+/**
+ * Remove any markdown emphasis markers the model produced.
+ *
+ * The prompts ask for **bold** keywords, but models also emit unbalanced (`**40%`)
+ * and tripled (`***React***`) markers. Anything left in the PDF becomes part of
+ * the token an ATS reads — "**40%" does not match a "40%" keyword search — so
+ * every string reaching the page is stripped, whether or not it is styled.
+ */
+export function stripMarkdownEmphasis(text: string): string {
+  return text.replace(/\*+/g, '');
+}
 
 // Memoized text processing function
 function useTextProcessor() {
@@ -34,26 +59,34 @@ function useTextProcessor() {
       return textProcessingCache.get(cacheKey);
     }
 
-    // If ignoring markdown, extract content between asterisks or return plain text
+    // Plain text, no styling. This previously did
+    //   text.match(/\*\*(.*?)\*\*/)?.[1] || text
+    // which returns only the FIRST bolded segment and silently discards the
+    // rest: "Senior **Software** Engineer" rendered as "Software". It is
+    // applied to job titles, companies, project names and schools — the
+    // highest-weighted fields in an ATS — so the download quietly disagreed
+    // with the on-screen preview. Strip the markers, keep every word.
     if (ignoreMarkdown) {
-      const content = text.match(/\*\*(.*?)\*\*/)?.[1] || text;
-      const processed = [<Text key={0}>{content}</Text>];
-      textProcessingCache.set(cacheKey, processed);
-      return processed;
+      return cacheProcessedText(cacheKey, [
+        <Text key={0}>{stripMarkdownEmphasis(text)}</Text>,
+      ]);
     }
 
-    // Process text if not in cache
-    const parts = text.split(/(\*\*.*?\*\*)/g);
+    // Style balanced **pairs**, and strip stray markers from the rest so no
+    // asterisk survives into the extracted text.
+    const parts = text.split(/(\*\*[\s\S]*?\*\*)/g);
     const processed = parts.map((part, index) => {
-      if (part.startsWith('**') && part.endsWith('**')) {
-        return <Text key={index} style={{ fontFamily: 'Helvetica-Bold' }}>{part.slice(2, -2)}</Text>;
+      if (part.length > 4 && part.startsWith('**') && part.endsWith('**')) {
+        return (
+          <Text key={index} style={{ fontFamily: 'Helvetica-Bold' }}>
+            {stripMarkdownEmphasis(part.slice(2, -2))}
+          </Text>
+        );
       }
-      return <Text key={index}>{part}</Text>;
+      return <Text key={index}>{stripMarkdownEmphasis(part)}</Text>;
     });
 
-    // Store in cache
-    textProcessingCache.set(cacheKey, processed);
-    return processed;
+    return cacheProcessedText(cacheKey, processed);
   }, []);
 
   return processText;
@@ -69,7 +102,8 @@ const HeaderSection = memo(function HeaderSection({
 }) {
   return (
     <View style={styles.header}>
-      <Text style={styles.name}>{resume.first_name} {resume.last_name}</Text>
+      {/* joinDefined avoids a leading/trailing space when one name is missing. */}
+      <Text style={styles.name}>{joinDefined([resume.first_name, resume.last_name])}</Text>
       <View style={styles.contactInfo}>
         {resume.location && (
           <>
@@ -136,12 +170,27 @@ const SkillsSection = memo(function SkillsSection({
     <View style={styles.skillsSection}>
       <Text style={styles.sectionTitle}>Skills</Text>
       <View style={styles.skillsGrid}>
-        {skills.map((skillCategory, index) => (
-          <View key={index} style={styles.skillCategory}>
-            <Text style={styles.skillCategoryTitle}>{skillCategory.category}:</Text>
-            <Text style={styles.skillItem}>{skillCategory.items.join(', ')}</Text>
-          </View>
-        ))}
+        {/* Skills are the densest keyword region on the page, and the import
+            prompt asks the model to bold technical terms — so markers must be
+            stripped here too, or "**Python**" is a different token to an ATS
+            than "Python". The colon is dropped when there is no category. */}
+        {skills.map((skillCategory, index) => {
+          const category = stripMarkdownEmphasis(skillCategory.category ?? '').trim();
+          const items = (skillCategory.items ?? [])
+            .map(item => stripMarkdownEmphasis(item).trim())
+            .filter(Boolean);
+
+          if (!category && items.length === 0) return null;
+
+          return (
+            <View key={index} style={styles.skillCategory}>
+              {category.length > 0 && (
+                <Text style={styles.skillCategoryTitle}>{category}:</Text>
+              )}
+              <Text style={styles.skillItem}>{items.join(', ')}</Text>
+            </View>
+          );
+        })}
       </View>
     </View>
   );
@@ -230,11 +279,13 @@ const ProjectsSection = memo(function ProjectsSection({
                 )}
               </View>
             </View>
-            {project.technologies && (
+            {/* `.length`, not truthiness — an empty array rendered an empty
+                text node. */}
+            {project.technologies?.length ? (
               <Text style={styles.projectTechnologies}>
-                {project.technologies.map(tech => tech.replace(/\*\*/g, '')).join(', ')}
+                {project.technologies.map(stripMarkdownEmphasis).join(', ')}
               </Text>
-            )}
+            ) : null}
           </View>
           
           {project.description.map((bullet, bulletIndex) => (
@@ -275,11 +326,18 @@ const EducationSection = memo(function EducationSection({
             </View>
             <Text style={styles.dateRange}>{edu.date}</Text>
           </View>
-          {edu.achievements && edu.achievements.map((achievement, bulletIndex) => (
+          {edu.achievements?.map((achievement, bulletIndex) => (
             <View key={bulletIndex} style={styles.bulletPoint}>
               <Text style={styles.bulletDot}>•</Text>
+              {/* Wrapped in <Text> like the experience and project bullets.
+                  Dropping the parts straight into a flexDirection:'row' View
+                  made each fragment its own flex item, so the spaces around a
+                  bold run were trimmed at layout and the extracted text came
+                  out as "AwardedDean's Listfor 4 terms". */}
               <View style={styles.bulletText}>
-                {processText(achievement)}
+                <Text style={styles.bulletTextContent}>
+                  {processText(achievement)}
+                </Text>
               </View>
             </View>
           ))}
@@ -339,6 +397,7 @@ function createResumeStyles(settings: Resume['document_settings'] = {
     education_margin_horizontal = 0,
     education_item_spacing = 4,
     footer_width = 95,
+    show_ubc_footer = false,
   } = settings;
 
   return StyleSheet.create({
@@ -346,7 +405,10 @@ function createResumeStyles(settings: Resume['document_settings'] = {
     // Base page configuration
     page: {
       paddingTop: document_margin_vertical,
-      paddingBottom: document_margin_vertical + 28,
+      // The footer is absolutely positioned at bottom:20 and is ~68pt tall at
+      // the default width, so a flat +28 let it overlap the last lines of body
+      // text in the download while the on-screen preview looked fine.
+      paddingBottom: document_margin_vertical + (show_ubc_footer ? 76 : 28),
       paddingLeft: document_margin_horizontal,
       paddingRight: document_margin_horizontal,
       fontFamily: 'Helvetica',
@@ -569,11 +631,25 @@ export const ResumePDFDocument = memo(function ResumePDFDocument({ resume }: Res
     <PDFDocument>
       <PDFPage size="LETTER" style={styles.page}>
         <HeaderSection resume={resume} styles={styles} />
-        <SkillsSection skills={resume.skills} styles={styles} />
-        <ExperienceSection experiences={resume.work_experience} styles={styles} />
-        <ProjectsSection projects={resume.projects} styles={styles} />
-        <EducationSection education={resume.education} styles={styles} />
-        
+
+        {/* Driven by the same helper as the on-screen preview. This used to be
+            a fixed order that ignored section_order, so the downloaded file
+            listed sections differently from the page the student was editing. */}
+        {getSectionOrder(resume).map((section) => {
+          if (!isSectionVisible(resume, section)) return null;
+
+          switch (section) {
+            case 'skills':
+              return <SkillsSection key={section} skills={resume.skills} styles={styles} />;
+            case 'experience':
+              return <ExperienceSection key={section} experiences={resume.work_experience} styles={styles} />;
+            case 'projects':
+              return <ProjectsSection key={section} projects={resume.projects} styles={styles} />;
+            case 'education':
+              return <EducationSection key={section} education={resume.education} styles={styles} />;
+          }
+        })}
+
         {resume.document_settings?.show_ubc_footer && (
           <View style={styles.footer}>
             {/* React PDF Image does not support alt text, so disable lint here */}

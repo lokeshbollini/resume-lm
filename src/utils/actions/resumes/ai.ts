@@ -3,6 +3,7 @@
 // import { RESUME_IMPORTER_SYSTEM_MESSAGE, } from "@/lib/prompts";
 import { Resume } from "@/lib/types";
 import { textImportSchema, workExperienceBulletPointsSchema } from "@/lib/zod-schemas";
+import { buildLabelledResumeText } from "@/lib/resume-sections";
 import { generateObject, type LanguageModelUsage, type LanguageModelV1, type TelemetrySettings } from "ai";
 import { z } from "zod";
 import { type AIConfig } from '@/utils/ai-tools';
@@ -64,6 +65,12 @@ export async function convertTextToResume(prompt: string, existingResume: Resume
     config,
   });
 
+  // Split the resume on its own printed headings before the model sees it.
+  // Deciding which schema array a line belongs to is the part small models get
+  // wrong; the headings answer that exactly, for free.
+  const { labelled, hasExperience, hasProjects, experienceBlock } =
+    buildLabelledResumeText(prompt);
+
   let object: { content: z.infer<typeof textImportSchema> };
   try {
     const result = await runTrackedAIRequest(
@@ -114,8 +121,17 @@ export async function convertTextToResume(prompt: string, existingResume: Resume
           - Do not add any new information or rephrase the provided content—only apply minor formatting (like bolding) to emphasize key points.
         `,
         prompt: `INPUT:
-    Extract and transform the resume information from the following text:
-    ${prompt}
+    The resume below has already been split on its own headings, and each block
+    is labelled with the schema field it feeds. Follow those labels exactly —
+    do not move content between sections.
+${hasExperience ? `
+    The EXPERIENCE block contains ${'`'}work_experience${'`'} entries. Emit one entry per
+    job, with that job's bullets in its ${'`'}description${'`'} array.` : ''}${!hasProjects ? `
+    This resume has NO projects section. Return ${'`'}"projects": []${'`'}. Do not create
+    projects out of bullets that belong to a job.` : ''}
+
+${labelled}
+
     Now, format this information into the JSON object according to the schema, ensuring it is optimized for the target role: ${targetRole}.`,
       })
     );
@@ -123,7 +139,53 @@ export async function convertTextToResume(prompt: string, existingResume: Resume
   } catch (error) {
     throw error;
   }
-  
+
+  // The resume's headings are ground truth, so anything the model inferred
+  // that contradicts them is wrong by construction. A resume with no PROJECTS
+  // heading has no projects; entries here are misfiled job bullets.
+  if (!hasProjects && object.content.projects?.length) {
+    object.content.projects = [];
+  }
+
+  // Last resort when the model still returned no jobs from a resume that
+  // plainly has an experience section. One retry, one section, one field —
+  // far easier than extracting the whole document at once.
+  if (
+    hasExperience &&
+    experienceBlock &&
+    !object.content.work_experience?.length
+  ) {
+    try {
+      const recovered = await runTrackedAIRequest(
+        {
+          route: 'actions.resumes.convertTextToResume.workExperienceRetry',
+          userId,
+          isPro,
+          config: resolvedConfig,
+        },
+        (aiClient, telemetry) => generateObject({
+          model: aiClient,
+          maxRetries: 0,
+          experimental_telemetry: telemetry,
+          schema: z.object({
+            work_experience: textImportSchema.shape.work_experience,
+          }),
+          system:
+            'You extract employment history. Every job in the text becomes one entry: ' +
+            'company, position, date, and that job\'s bullets as the description array. ' +
+            'Never split one job into several entries. Never omit a job. Output JSON only.',
+          prompt: `Extract every job from this EXPERIENCE section:\n\n${experienceBlock}`,
+        }),
+      );
+
+      if (recovered.object.work_experience?.length) {
+        object.content.work_experience = recovered.object.work_experience;
+      }
+    } catch {
+      // Keep whatever the first pass produced rather than failing the import.
+    }
+  }
+
   const updatedResume = {
     ...existingResume,
     ...(object.content.first_name && { first_name: object.content.first_name }),
@@ -155,8 +217,12 @@ export async function convertTextToResume(prompt: string, existingResume: Resume
       targetRole: string,
       numPoints: number = 3,
       customPrompt: string = '',
-      config?: AIConfig
-    ) { 
+      config?: AIConfig,
+      // Bullets already on this entry. Without them the prompt was byte-for-byte
+      // identical on every click, so the model had no way to know anything had
+      // been generated before — and returned the same bullets each time.
+      existingPoints: string[] = [],
+    ) {
       const { isPro, userId } = await getAIPlanState();
   
       // Use custom prompt if provided in config, otherwise fall back to default
@@ -179,11 +245,38 @@ export async function convertTextToResume(prompt: string, existingResume: Resume
       Company: ${company}
       Technologies: ${technologies.join(', ')}
       Target Role: ${targetRole}
-      Number of Points: ${numPoints}${customPrompt ? `\nCustom Focus: ${customPrompt}` : ''}`,
+      Number of Points: ${numPoints}${customPrompt ? `\nCustom Focus: ${customPrompt}` : ''}${
+        existingPoints.length
+          ? `
+
+      ALREADY ON THIS ENTRY — do not repeat these, and do not rephrase them:
+${existingPoints.map((point) => `      - ${point}`).join('\n')}
+
+      Write ${numPoints} bullet point(s) covering DIFFERENT responsibilities,
+      projects or outcomes from the ones above.`
+          : ''
+      }`,
         system: systemPrompt,
+        // The prompt for a given entry is otherwise near-constant, and the
+        // default sampling settings gave near-identical output on repeat
+        // clicks. This is generation, not extraction — variety is the point.
+        temperature: 0.8,
       }));
 
-      return object.content;
+      // The model can still echo an existing bullet. Filter exact and
+      // whitespace/case-insensitive repeats rather than showing the user a
+      // "new" suggestion they already have.
+      const seen = new Set(
+        existingPoints.map((point) => point.trim().toLowerCase()),
+      );
+      const points = (object.content.points ?? []).filter((point) => {
+        const key = point.trim().toLowerCase();
+        if (key.length === 0 || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      return { ...object.content, points };
       }
     
       // WORK EXPERIENCE BULLET POINTS IMPROVEMENT

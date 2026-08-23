@@ -69,3 +69,29 @@ export function tolerantStringArray() {
 export function tolerantObject<T extends z.ZodTypeAny>(schema: T) {
   return z.preprocess(coerceJsonValue, schema);
 }
+
+/**
+ * Coerce a numeric string to a number.
+ *
+ * Models routinely quote numbers in JSON — `{"index": "0"}` — because the
+ * surrounding fields are strings. That failed every indexed tool with
+ * "expected number, received string", which is the difference between the
+ * assistant editing the right entry and refusing to act at all.
+ *
+ * Only strings that are entirely a number convert; "0 (first)" stays a string
+ * so Zod still rejects it.
+ */
+export function coerceNumber(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return value;
+
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : value;
+}
+
+/** z.number() that also accepts a quoted number. */
+export function tolerantNumber() {
+  return z.preprocess(coerceNumber, z.number());
+}

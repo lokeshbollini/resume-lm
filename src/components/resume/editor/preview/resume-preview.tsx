@@ -8,6 +8,7 @@
 
 "use client";
 import { joinDefined } from "@/lib/resume-text";
+import { getSectionOrder, isSectionVisible } from "@/lib/resume-section-order";
 
 import Image from "next/image";
 import { memo, type ReactNode } from "react";
@@ -46,14 +47,6 @@ const DEFAULT_DOCUMENT_SETTINGS: DocumentSettings = {
   footer_width: 95,
 };
 
-type SectionName = "skills" | "experience" | "projects" | "education";
-
-const DEFAULT_SECTION_ORDER: SectionName[] = [
-  "skills",
-  "experience",
-  "projects",
-  "education",
-];
 
 function normalizeUrl(value: string): string {
   return value.startsWith("http://") || value.startsWith("https://")
@@ -287,23 +280,6 @@ function EducationSection({ education, settings }: { education: Education[]; set
       ))}
     </section>
   );
-}
-
-function isSectionVisible(resume: Resume, section: SectionName): boolean {
-  return resume.section_configs?.[section]?.visible !== false;
-}
-
-function getSectionOrder(resume: Resume): SectionName[] {
-  const requested = resume.section_order?.filter((section): section is SectionName =>
-    DEFAULT_SECTION_ORDER.includes(section as SectionName),
-  );
-
-  if (!requested?.length) return DEFAULT_SECTION_ORDER;
-
-  return [
-    ...requested,
-    ...DEFAULT_SECTION_ORDER.filter((section) => !requested.includes(section)),
-  ];
 }
 
 function ResumeSections({ resume, settings }: { resume: Resume; settings: DocumentSettings }) {

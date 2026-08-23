@@ -1,6 +1,6 @@
 import { tool as createTool } from 'ai';
 import { z } from 'zod';
-import { tolerantArray, tolerantStringArray } from '@/lib/ai/tolerant-json';
+import { tolerantArray, tolerantNumber, tolerantStringArray } from '@/lib/ai/tolerant-json';
 
 export const getResumeTool = createTool({
   description: 'Get the user Resume. Can request specific sections or "all" for the entire resume.',
@@ -22,7 +22,7 @@ export const getResumeTool = createTool({
 export const suggestWorkExperienceTool = createTool({
   description: 'Suggest improvements for a specific work experience entry',
   parameters: z.object({
-    index: z.number().describe('Index of the work experience entry to improve'),
+    index: tolerantNumber().describe('Index of the work experience entry to improve'),
     improved_experience: z.object({
       date: z.string(),
       company: z.string(),
@@ -37,7 +37,7 @@ export const suggestWorkExperienceTool = createTool({
 export const suggestProjectTool = createTool({
   description: 'Suggest improvements for a specific project entry',
   parameters: z.object({
-    index: z.number().describe('Index of the project entry to improve'),
+    index: tolerantNumber().describe('Index of the project entry to improve'),
     improved_project: z.object({
       name: z.string(),
       description: tolerantStringArray(),
@@ -52,7 +52,7 @@ export const suggestProjectTool = createTool({
 export const suggestSkillTool = createTool({
   description: 'Suggest improvements for a specific skill category',
   parameters: z.object({
-    index: z.number().describe('Index of the skill category to improve'),
+    index: tolerantNumber().describe('Index of the skill category to improve'),
     improved_skill: z.object({
       category: z.string(),
       items: tolerantStringArray(),
@@ -63,7 +63,7 @@ export const suggestSkillTool = createTool({
 export const suggestEducationTool = createTool({
   description: 'Suggest improvements for a specific education entry',
   parameters: z.object({
-    index: z.number().describe('Index of the education entry to improve'),
+    index: tolerantNumber().describe('Index of the education entry to improve'),
     improved_education: z.object({
       school: z.string(),
       degree: z.string(),

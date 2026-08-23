@@ -185,7 +185,10 @@ export const WorkExperienceForm = memo(function WorkExperienceFormComponent({
         {
           model: selectedModel || '',
           apiKeys
-        }
+        },
+        // Send the bullets already on this entry so the model writes new ones
+        // instead of regenerating what is there.
+        exp.description || []
       );
       
       const suggestions = result.points.map((point: string) => ({
@@ -222,8 +225,18 @@ export const WorkExperienceForm = memo(function WorkExperienceFormComponent({
 
   const approveSuggestion = (expIndex: number, suggestion: AISuggestion) => {
     const updated = [...experiences];
-    updated[expIndex].description = [...updated[expIndex].description, suggestion.point];
-    onChange(updated);
+    const existing = updated[expIndex].description ?? [];
+
+    // Last line of defence against a duplicate reaching the resume — accepting
+    // the same regenerated bullet twice used to silently add it twice.
+    const alreadyPresent = existing.some(
+      (point) => point.trim().toLowerCase() === suggestion.point.trim().toLowerCase(),
+    );
+
+    if (!alreadyPresent) {
+      updated[expIndex] = { ...updated[expIndex], description: [...existing, suggestion.point] };
+      onChange(updated);
+    }
     
     // Remove the suggestion after approval
     setAiSuggestions(prev => ({
