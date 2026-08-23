@@ -68,23 +68,71 @@ Three ways to keep that bounded, in increasing order of strictness:
    Settings; a user key is used whenever the instance has no matching server
    key.
 
-## Database migration
+## Database migrations
 
-`supabase/migrations/20260823120000_self_host_grant_pro_access.sql` backfills a
-Pro row for existing users and adds a trigger granting one to every future
-signup.
+Run `schema.sql` first, then everything in `supabase/migrations/` in filename
+order — `supabase db push`, or pasted into the Supabase SQL editor. `schema.sql`
+alone is **not** enough: it omits `ai_usage_events`, so AI requests fail without
+the migrations.
 
-The app flag alone is enough to unlock features, so this is belt-and-braces —
-but it fixes two real gaps:
+Three of those files are specific to this fork.
+
+### `20260823120000_self_host_grant_pro_access.sql`
+
+Backfills a Pro row for existing users and adds a trigger granting one to every
+future signup. The app flag alone already unlocks the features, so this is
+belt-and-braces — but it closes two real gaps:
 
 - Upstream's `AUTO_PRO_SUBSCRIPTION` only fires on **email** signup, so OAuth
   users never get a row. A trigger on `auth.users` catches every path.
 - Admin screens read `subscriptions` directly and would otherwise show everyone
   as "free".
 
-Apply it with `supabase db push`, or paste it into the Supabase SQL editor.
-
 Do **not** apply it to a deployment where you actually charge for Pro.
+
+### `20260801090000_harden_public_function_search_paths.sql` (modified)
+
+Upstream's version `ALTER`s a fixed list of functions, several of which
+`schema.sql` never creates — so on a fresh database the first missing one aborts
+the migration with a bare "function does not exist". This fork iterates over the
+functions that are actually present instead.
+
+### `20260823130000_admin_dashboard_rpcs.sql` (new)
+
+`src/app/(dashboard)/admin/actions.ts` calls four Postgres functions that live
+in ResumeLM's own database but were never committed to the repo. Without them
+the `/admin` page fails with "function does not exist". This migration supplies
+them:
+
+| Function | Returns |
+|---|---|
+| `get_profiles_for_users(uuid[])` | `setof profiles` |
+| `get_subscriptions_for_users(uuid[])` | `setof subscriptions` |
+| `get_resume_counts_for_users(uuid[])` | `table(user_id uuid, resume_count integer)` |
+| `count_total_resumes()` | `integer` |
+| `count_total_users()` | `integer` |
+
+They are `SECURITY INVOKER` on purpose. Every caller is `createServiceClient()`,
+which already bypasses RLS, so a `SECURITY DEFINER` function returning every
+user's profile would add a privilege-escalation surface reachable from PostgREST
+and buy nothing. Execute is revoked from `anon` and `authenticated`.
+
+The counts return `integer` rather than `bigint` because PostgREST serializes
+`bigint` as a JSON *string*, and `getTotalResumeCount()` does
+`typeof data === 'number' ? data : 0` — a `bigint` return would make the
+dashboard quietly show 0.
+
+## Becoming an admin
+
+`/admin` is gated on `profiles.is_admin`, which defaults to false and has no UI
+to change it. Grant it in the SQL editor:
+
+```sql
+update public.profiles set is_admin = true where email = 'you@example.com';
+```
+
+The row only exists after that account has loaded the dashboard once — the app
+creates profiles lazily on first visit.
 
 ## Licensing
 
